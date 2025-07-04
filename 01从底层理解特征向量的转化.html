@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>交互式CNN特征提取演示 (动画版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* slate-50 */
+        }
+        .grid-container {
+            display: grid;
+            gap: 1px;
+            border: 1px solid #e2e8f0; /* slate-200 */
+            padding: 2px;
+            background-color: #e2e8f0; /* slate-200 */
+            position: relative;
+        }
+        .pixel {
+            width: 25px;
+            height: 25px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 10px;
+            background-color: #ffffff;
+            user-select: none;
+            transition: all 0.2s;
+        }
+        .highlight-input {
+            background-color: rgba(251, 146, 60, 0.5) !important; /* orange-400 with opacity */
+            border: 1px solid #f97316; /* orange-500 */
+        }
+        .highlight-output {
+            background-color: rgba(74, 222, 128, 0.6) !important; /* green-400 with opacity */
+            border: 1px solid #16a34a; /* green-600 */
+        }
+        .highlight-flatten-source {
+            box-shadow: 0 0 0 3px #f97316; /* orange-500 */
+            transform: scale(1.1);
+        }
+        .highlight-flatten-dest {
+            box-shadow: 0 0 0 3px #16a34a; /* green-600 */
+            transform: scale(1.1);
+        }
+        .section-title {
+            font-size: 1.5rem; /* text-2xl */
+            font-weight: 700; /* font-bold */
+            color: #1e293b; /* slate-800 */
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #64748b; /* slate-500 */
+            padding-bottom: 0.5rem;
+        }
+        .step-card {
+            background-color: white;
+            border-radius: 0.75rem; /* rounded-xl */
+            padding: 1.5rem; /* p-6 */
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            margin-bottom: 2rem;
+        }
+        .button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            background-color: #3b82f6; /* blue-500 */
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .button:hover {
+            background-color: #2563eb; /* blue-600 */
+        }
+        .button.active {
+            background-color: #16a34a; /* green-600 */
+        }
+        .button.pause-btn {
+            background-color: #f97316; /* orange-500 */
+        }
+        .button.pause-btn:hover {
+            background-color: #ea580c; /* orange-600 */
+        }
+        .arrow {
+            font-size: 2rem;
+            color: #94a3b8; /* slate-400 */
+            align-self: center;
+            margin: 1rem 0;
+        }
+        .explanation-box {
+            background-color: #f1f5f9; /* slate-100 */
+            border-left: 4px solid #3b82f6; /* blue-500 */
+            padding: 1rem;
+            margin-top: 1.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.9rem;
+            color: #334155; /* slate-700 */
+            min-height: 100px;
+        }
+        .calculation-detail {
+            font-family: monospace;
+            font-size: 0.8rem;
+            word-wrap: break-word;
+        }
+        .flatten-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2px;
+            padding: 4px;
+            background-color: #e2e8f0;
+            border-radius: 0.5rem;
+        }
+        .vector-pixel {
+            width: 30px;
+            height: 30px;
+            font-size: 9px;
+            border: 1px solid #cbd5e1;
+        }
+        .fc-container {
+            position: relative;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .fc-layer {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .fc-neuron {
+            width: 40px;
+            height: 25px;
+            border: 1px solid #94a3b8;
+            border-radius: 0.25rem;
+            font-size: 9px;
+        }
+        .fc-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        .fc-line {
+            stroke: #cbd5e1;
+            stroke-width: 0.5;
+            transition: all 0.2s;
+        }
+        .fc-line-highlight {
+            stroke: #f97316;
+            stroke-width: 1.5;
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-5xl mx-auto">
+        <h1 class="text-3xl font-bold text-center text-slate-900 mb-2">图片如何变成特征向量？</h1>
+        <p class="text-center text-slate-600 mb-8">一个可交互的卷积神经网络(CNN)特征提取过程演示</p>
+
+        <div class="step-card">
+            <h2 class="section-title">第一步：输入图像 (原始像素)</h2>
+            <p class="text-slate-600 mb-4">计算机“看到”的不是一张笑脸，而是一个由数字组成的矩阵。每个数字代表一个像素的亮度 <span class="font-bold">(0=黑, 255=白)</span>。</p>
+            <div class="flex justify-center items-center gap-8">
+                <div id="input-grid" class="grid-container"></div>
+            </div>
+        </div>
+
+        <div class="step-card">
+            <h2 class="section-title">第二步：卷积动画演示</h2>
+            <p class="text-slate-600 mb-4">选择一个滤镜，下方的动画将为您展示特征图中的<span class="font-bold text-green-600">每一个值</span>是如何通过计算得出的。</p>
+            <div class="flex justify-center gap-4 mb-6">
+                <button id="filter-vertical" class="button">垂直边缘滤镜</button>
+                <button id="filter-horizontal" class="button">水平边缘滤镜</button>
+                <button id="filter-corner" class="button">角点滤镜</button>
+            </div>
+            <div class="flex justify-center items-center gap-4 mb-6">
+                <label for="speed-slider" class="text-slate-700 text-sm">动画速度:</label>
+                <input type="range" id="speed-slider" min="1" max="5" value="3" class="w-32 cursor-pointer">
+                <span id="speed-label" class="text-slate-700 font-medium w-16 text-center text-sm">正常</span>
+                <button id="pause-button" class="button pause-btn">暂停</button>
+            </div>
+            <div class="flex flex-col md:flex-row justify-around items-center gap-4">
+                <div>
+                    <h3 class="font-bold text-center mb-2 text-slate-700">当前选择的滤镜:</h3>
+                    <div id="kernel-grid" class="grid-container"></div>
+                </div>
+                <div class="arrow">动画演示 →</div>
+                <div>
+                    <h3 class="font-bold text-center mb-2 text-slate-700">输出的特征图:</h3>
+                    <div id="output-grid" class="grid-container"></div>
+                </div>
+            </div>
+            <div class="explanation-box">
+                <h4 class="font-bold mb-2">实时计算过程:</h4>
+                <div id="explanation-text">请选择一个滤镜开始动画。</div>
+            </div>
+        </div>
+
+        <div id="step3-card" class="step-card hidden">
+            <h2 class="section-title">第三步：压平 (Flatten) 动画</h2>
+            <p class="text-slate-600 mb-4">卷积完成后，我们需要将2D的特征图转换成1D的向量，才能送入下一层。这个过程很简单：就是把所有数字按顺序“拉直”。</p>
+            <div class="flex flex-col items-center gap-4">
+                <div>
+                    <h3 class="font-bold text-center mb-2 text-slate-700">待压平的特征图:</h3>
+                    <div id="flatten-source-grid" class="grid-container"></div>
+                </div>
+                <div class="arrow">↓</div>
+                <div>
+                    <h3 class="font-bold text-center mb-2 text-slate-700">压平后的一维向量:</h3>
+                    <div id="flatten-dest-container" class="flatten-container"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="step4-card" class="step-card hidden">
+            <h2 class="section-title">第四步：全连接层动画</h2>
+            <p class="text-slate-600 mb-4">“压平”后的长向量包含了“哪里有什么特征”的信息。全连接层(Fully Connected Layer)会综合这些信息，进行最终的判断和浓缩，输出一个更短、更精华的最终特征向量。</p>
+            <div class="flex flex-col items-center gap-4">
+                <div class="fc-container" id="fc-container">
+                    <div id="fc-input-layer" class="fc-layer"></div>
+                    <svg id="fc-svg" class="fc-svg"></svg>
+                    <div id="fc-output-layer" class="fc-layer"></div>
+                </div>
+            </div>
+             <div class="explanation-box">
+                <h4 class="font-bold mb-2">实时计算过程 (以第一个输出神经元为例):</h4>
+                <div id="fc-explanation-text">动画开始...</div>
+            </div>
+        </div>
+        
+        <div class="step-card">
+            <h2 class="section-title">附：权重是如何“学习”的？</h2>
+            <p class="text-slate-600 mb-4">也许你会好奇，这个过程中*后的权重是如何得来的。答案是通过“学习”，也就是不断地根据错误来微调权重。下面是一个极度简化的例子，展示了单个权重更新的核心思想：</p>
+            <div class="explanation-box">
+                <ol class="list-decimal list-inside space-y-4 text-slate-800">
+                    <li>
+                        <strong>AI进行预测 (犯错)</strong><br>
+                        <span class="text-sm ml-4 mt-1 inline-block">
+                        AI用当前的随机权重(-0.5)进行计算。<br>
+                        <code class="text-sm bg-slate-200 p-1 rounded mt-1 inline-block">得分 = 输入值 × 旧权重 = 510 × (-0.5) = -255</code>
+                        </span>
+                    </li>
+                    <li>
+                        <strong>得到反馈 (纠错)</strong><br>
+                        <span class="text-sm ml-4 mt-1 inline-block">我们告诉AI，它的判断是错的。它应该得到一个代表“绝对是笑脸”的高分，比如 1000。</span>
+                    </li>
+                    <li>
+                        <strong>计算误差 (Error)</strong><br>
+                        <span class="text-sm ml-4 mt-1 inline-block">
+                        AI计算自己错得有多离谱。<br>
+                        <code class="text-sm bg-slate-200 p-1 rounded mt-1 inline-block">误差 = 期望值 - 实际值 = 1000 - (-255) = 1255</code>
+                        </span>
+                    </li>
+                    <li>
+                        <strong>计算权重更新量 (核心)</strong><br>
+                        <span class="text-sm ml-4 mt-1 inline-block">
+                        根据固定的学习公式，计算权重应该改变多少。<br>
+                        <code class="text-sm bg-slate-200 p-1 rounded mt-1 inline-block">新权重 = 旧权重 + (学习率 × 误差 × 输入值)</code><br>
+                        <code class="text-sm bg-slate-200 p-1 rounded mt-1 inline-block">更新量 = 0.00001 (学习率) × 1255 (误差) × 510 (输入值) = 6.4</code>
+                        </span>
+                    </li>
+                    <li>
+                        <strong>更新权重 (进化)</strong><br>
+                        <span class="text-sm ml-4 mt-1 inline-block">
+                        将旧权重更新为新权重。<br>
+                        <code class="text-sm bg-slate-200 p-1 rounded mt-1 inline-block">新权重 = -0.5 (旧权重) + 6.4 (更新量) = 5.9</code>
+                        </span>
+                    </li>
+                </ol>
+                 <p class="mt-6 text-sm text-slate-700">通过成千上万次这样的“预测→纠错→更新”循环，整个网络的数百万个权重会逐渐调整到能够准确识别各种特征（如眼睛、嘴巴）并最终做出正确判断（如“这是一张笑脸”）的状态。</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- 数据定义 ---
+        const image = [
+            [255, 255, 255, 255, 255, 255, 255, 255],
+            [255, 255, 0,   255, 255, 0,   255, 255],
+            [255, 255, 0,   255, 255, 0,   255, 255],
+            [255, 255, 255, 255, 255, 255, 255, 255],
+            [255, 0,   255, 255, 255, 255, 0,   255],
+            [255, 0,   0,   0,   0,   0,   0,   255],
+            [255, 255, 255, 255, 255, 255, 255, 255],
+            [255, 255, 255, 255, 255, 255, 255, 255],
+        ];
+
+        const kernels = {
+            vertical: { matrix: [[-1, 2, -1], [-1, 2, -1], [-1, 2, -1]] },
+            horizontal: { matrix: [[-1, -1, -1], [2, 2, 2], [-1, -1, -1]] },
+            corner: { matrix: [[2, -1, -1], [-1, 2, -1], [-1, -1, 2]] }
+        };
+        
+        // --- DOM 元素 ---
+        const inputGrid = document.getElementById('input-grid');
+        const kernelGrid = document.getElementById('kernel-grid');
+        const outputGrid = document.getElementById('output-grid');
+        const explanationText = document.getElementById('explanation-text');
+        const speedSlider = document.getElementById('speed-slider');
+        const speedLabel = document.getElementById('speed-label');
+        const pauseButton = document.getElementById('pause-button');
+        const buttons = {
+            vertical: document.getElementById('filter-vertical'),
+            horizontal: document.getElementById('filter-horizontal'),
+            corner: document.getElementById('filter-corner'),
+        };
+        const step3Card = document.getElementById('step3-card');
+        const step4Card = document.getElementById('step4-card');
+        const flattenSourceGrid = document.getElementById('flatten-source-grid');
+        const flattenDestContainer = document.getElementById('flatten-dest-container');
+        const fcInputLayer = document.getElementById('fc-input-layer');
+        const fcOutputLayer = document.getElementById('fc-output-layer');
+        const fcSvg = document.getElementById('fc-svg');
+        const fcExplanationText = document.getElementById('fc-explanation-text');
+
+
+        // --- 动画状态 ---
+        let animationTimer = null;
+        let activeAnimationStepFunction = null;
+        let isPaused = false;
+        let currentX = 0;
+        let currentY = 0;
+        let currentKernel = kernels.vertical.matrix;
+        let featureMapData = [];
+        let fcWeights = [];
+
+        let animationSpeed = 150;
+        const speedMap = { '1': 500, '2': 300, '3': 150, '4': 75, '5': 30 };
+        const speedTextMap = { '1': '很慢', '2': '较慢', '3': '正常', '4': '快速', '5': '极快' };
+
+        // --- 函数 ---
+        function renderGrid(container, gridData, isOutput = false) {
+            container.innerHTML = '';
+            const rows = gridData.length;
+            const cols = gridData[0].length;
+            container.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+            
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < cols; j++) {
+                    const pixel = document.createElement('div');
+                    pixel.classList.add('pixel');
+                    pixel.id = `${container.id}-pixel-${i}-${j}`;
+                    const value = gridData[i][j];
+                    
+                    if (isOutput) {
+                        pixel.textContent = '';
+                    } else {
+                        pixel.textContent = value;
+                        pixel.style.backgroundColor = `rgb(${value}, ${value}, ${value})`;
+                        pixel.style.color = value > 128 ? 'black' : 'white';
+                    }
+                    container.appendChild(pixel);
+                }
+            }
+        }
+
+        function stepConvolution() {
+            if (isPaused) return;
+
+            document.querySelectorAll('.highlight-input, .highlight-output').forEach(el => el.classList.remove('highlight-input', 'highlight-output'));
+            
+            const outputH = featureMapData.length;
+            const outputW = featureMapData[0].length;
+
+            if (currentY >= outputH) {
+                explanationText.innerHTML = "卷积动画完成！即将开始下一步...";
+                pauseButton.disabled = true;
+                activeAnimationStepFunction = null;
+                setTimeout(startFlattenAnimation, 1000);
+                return;
+            }
+
+            const outputPixel = document.getElementById(`output-grid-pixel-${currentY}-${currentX}`);
+            outputPixel.classList.add('highlight-output');
+            
+            let sum = 0;
+            let calcString = "计算: (";
+
+            for (let ky = 0; ky < currentKernel.length; ky++) {
+                for (let kx = 0; kx < currentKernel[0].length; kx++) {
+                    const inputPixelEl = document.getElementById(`input-grid-pixel-${currentY + ky}-${currentX + kx}`);
+                    inputPixelEl.classList.add('highlight-input');
+                    
+                    const pixelVal = image[currentY + ky][currentX + kx];
+                    const kernelVal = currentKernel[ky][kx];
+                    sum += pixelVal * kernelVal;
+                    calcString += `${pixelVal}*${kernelVal >= 0 ? ' ' : ''}${kernelVal} + `;
+                }
+            }
+            
+            calcString = calcString.slice(0, -2) + `) = ${sum}`;
+            const result = Math.max(0, sum);
+            featureMapData[currentY][currentX] = result;
+            calcString += `<br>激活 (ReLU): max(0, ${sum}) = <b class="text-green-700">${result}</b>`;
+
+            explanationText.innerHTML = `<div class="calculation-detail">${calcString}</div>`;
+            outputPixel.textContent = result;
+            const colorVal = Math.min(255, result / 5);
+            outputPixel.style.backgroundColor = `rgb(${colorVal}, ${colorVal}, ${colorVal})`;
+            outputPixel.style.color = colorVal > 128 ? 'black' : 'white';
+
+            currentX++;
+            if (currentX >= outputW) {
+                currentX = 0;
+                currentY++;
+            }
+            animationTimer = setTimeout(stepConvolution, animationSpeed);
+        }
+        
+        function startConvolution(kernelKey) {
+            clearTimeout(animationTimer);
+            
+            step3Card.classList.add('hidden');
+            step4Card.classList.add('hidden');
+            
+            currentKernel = kernels[kernelKey].matrix;
+            currentX = 0;
+            currentY = 0;
+            isPaused = false;
+            
+            Object.values(buttons).forEach(btn => btn.classList.remove('active'));
+            buttons[kernelKey].classList.add('active');
+            pauseButton.textContent = '暂停';
+            pauseButton.disabled = false;
+
+            const outputH = image.length - currentKernel.length + 1;
+            const outputW = image[0].length - currentKernel[0].length + 1;
+            featureMapData = Array(outputH).fill(0).map(() => Array(outputW).fill(0));
+            
+            renderGrid(outputGrid, featureMapData, true);
+            renderGrid(kernelGrid, currentKernel);
+            
+            activeAnimationStepFunction = stepConvolution;
+            stepConvolution();
+        }
+
+        function startFlattenAnimation() {
+            step3Card.classList.remove('hidden');
+            renderGrid(flattenSourceGrid, featureMapData);
+            
+            const flatVector = featureMapData.flat();
+            flattenDestContainer.innerHTML = '';
+            for(let i = 0; i < flatVector.length; i++) {
+                const pixel = document.createElement('div');
+                pixel.classList.add('pixel', 'vector-pixel');
+                pixel.id = `flatten-dest-pixel-${i}`;
+                flattenDestContainer.appendChild(pixel);
+            }
+
+            let i = 0;
+            function stepFlatten() {
+                if (i >= flatVector.length) {
+                    setTimeout(startFCAnimation, 1000);
+                    return;
+                }
+                
+                const row = Math.floor(i / featureMapData[0].length);
+                const col = i % featureMapData[0].length;
+
+                document.querySelectorAll('.highlight-flatten-source, .highlight-flatten-dest').forEach(el => el.classList.remove('highlight-flatten-source', 'highlight-flatten-dest'));
+
+                const sourcePixel = document.getElementById(`flatten-source-grid-pixel-${row}-${col}`);
+                const destPixel = document.getElementById(`flatten-dest-pixel-${i}`);
+                
+                sourcePixel.classList.add('highlight-flatten-source');
+                destPixel.classList.add('highlight-flatten-dest');
+                
+                const value = flatVector[i];
+                destPixel.textContent = value;
+                const colorVal = Math.min(255, value / 5);
+                destPixel.style.backgroundColor = `rgb(${colorVal}, ${colorVal}, ${colorVal})`;
+                destPixel.style.color = colorVal > 128 ? 'black' : 'white';
+
+                i++;
+                animationTimer = setTimeout(stepFlatten, 50); // Fast animation
+            }
+            stepFlatten();
+        }
+        
+        function startFCAnimation() {
+            step4Card.classList.remove('hidden');
+            const flatVector = featureMapData.flat();
+            const inputSize = flatVector.length;
+            const outputSize = 8;
+
+            fcInputLayer.innerHTML = '';
+            fcOutputLayer.innerHTML = '';
+            fcSvg.innerHTML = '';
+            fcExplanationText.innerHTML = '准备计算...';
+
+            flatVector.forEach((value, i) => {
+                const neuron = document.createElement('div');
+                neuron.classList.add('pixel', 'fc-neuron');
+                neuron.id = `fc-input-${i}`;
+                neuron.textContent = value;
+                fcInputLayer.appendChild(neuron);
+            });
+
+            for (let i = 0; i < outputSize; i++) {
+                const neuron = document.createElement('div');
+                neuron.classList.add('pixel', 'fc-neuron');
+                neuron.id = `fc-output-${i}`;
+                fcOutputLayer.appendChild(neuron);
+            }
+            
+            fcWeights = Array(outputSize).fill(0).map(() => 
+                Array(inputSize).fill(0).map(() => Math.random() * 2 - 1)
+            );
+
+            setTimeout(() => {
+                const inputNeurons = fcInputLayer.children;
+                const outputNeurons = fcOutputLayer.children;
+                const containerRect = document.getElementById('fc-container').getBoundingClientRect();
+
+                for (let i = 0; i < inputSize; i++) {
+                    for (let j = 0; j < outputSize; j++) {
+                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        const startRect = inputNeurons[i].getBoundingClientRect();
+                        const endRect = outputNeurons[j].getBoundingClientRect();
+                        
+                        line.id = `fc-line-${i}-${j}`;
+                        line.setAttribute('class', 'fc-line');
+                        line.setAttribute('x1', startRect.right - containerRect.left);
+                        line.setAttribute('y1', startRect.top + startRect.height / 2 - containerRect.top);
+                        line.setAttribute('x2', endRect.left - containerRect.left);
+                        line.setAttribute('y2', endRect.top + endRect.height / 2 - containerRect.top);
+                        fcSvg.appendChild(line);
+                    }
+                }
+                
+                pauseButton.disabled = false;
+                animateFCOutput(0, flatVector, outputSize);
+            }, 100);
+        }
+
+        function animateFCOutput(outputIndex, flatVector, outputSize) {
+            const inputSize = flatVector.length;
+            let currentInput = 0;
+            let sum = 0;
+            let calcString = '<b>求和:</b> ';
+
+            const outputNeuron = document.getElementById(`fc-output-${outputIndex}`);
+            outputNeuron.classList.add('highlight-output');
+            
+            function stepFC() {
+                if(isPaused) return;
+
+                if (currentInput >= inputSize) {
+                    const result = parseFloat(Math.tanh(sum / 1000).toFixed(2));
+                    calcString += `<br><b>总和 = ${sum.toFixed(0)}</b><br><b>激活 (tanh):</b> tanh(${sum.toFixed(0)}/1000) = <b class="text-green-700">${result}</b>`;
+                    fcExplanationText.innerHTML = `<div class="calculation-detail">${calcString}</div>`;
+                    outputNeuron.textContent = result;
+                    
+                    for(let j = outputIndex + 1; j < outputSize; j++) {
+                        let otherSum = 0;
+                        for(let i = 0; i < inputSize; i++) {
+                            otherSum += flatVector[i] * fcWeights[j][i];
+                        }
+                        document.getElementById(`fc-output-${j}`).textContent = parseFloat(Math.tanh(otherSum / 1000).toFixed(2));
+                    }
+                    
+                    activeAnimationStepFunction = null;
+                    pauseButton.textContent = "重播";
+                    return;
+                }
+
+                document.querySelectorAll('.fc-line-highlight, #fc-input-layer .highlight-input').forEach(el => el.classList.remove('fc-line-highlight', 'highlight-input'));
+
+                const inputNeuron = document.getElementById(`fc-input-${currentInput}`);
+                const line = document.getElementById(`fc-line-${currentInput}-${outputIndex}`);
+                inputNeuron.classList.add('highlight-input');
+                line.classList.add('fc-line-highlight');
+
+                const weight = fcWeights[outputIndex][currentInput];
+                sum += flatVector[currentInput] * weight;
+                calcString += `(${flatVector[currentInput]}*${weight.toFixed(1)})`;
+                if (currentInput < inputSize - 1) {
+                    calcString += ' + ';
+                }
+
+                fcExplanationText.innerHTML = `<div class="calculation-detail">${calcString}</div>`;
+                
+                currentInput++;
+                animationTimer = setTimeout(stepFC, animationSpeed);
+            }
+            
+            activeAnimationStepFunction = stepFC;
+            stepFC();
+        }
+
+        function togglePause() {
+            if (pauseButton.textContent === '重播') {
+                const activeBtn = document.querySelector('.button.active');
+                const activeKey = Object.keys(buttons).find(key => buttons[key] === activeBtn);
+                startConvolution(activeKey || 'vertical');
+                return;
+            }
+            isPaused = !isPaused;
+            pauseButton.textContent = isPaused ? '继续' : '暂停';
+            if (!isPaused && activeAnimationStepFunction) {
+                activeAnimationStepFunction();
+            }
+        }
+
+        function init() {
+            renderGrid(inputGrid, image);
+            
+            animationSpeed = speedMap[speedSlider.value];
+            speedLabel.textContent = speedTextMap[speedSlider.value];
+
+            speedSlider.addEventListener('input', (e) => {
+                const speedValue = e.target.value;
+                animationSpeed = speedMap[speedValue];
+                speedLabel.textContent = speedTextMap[speedValue];
+            });
+
+            pauseButton.addEventListener('click', togglePause);
+            buttons.vertical.addEventListener('click', () => startConvolution('vertical'));
+            buttons.horizontal.addEventListener('click', () => startConvolution('horizontal'));
+            buttons.corner.addEventListener('click', () => startConvolution('corner'));
+            
+            startConvolution('vertical');
+        }
+
+        window.onload = init;
+    </script>
+</body>
+</html>
